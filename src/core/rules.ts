@@ -43,6 +43,9 @@ export const RULES: Rule[] = [
 /** Leading words a company match must not start with: connectives and document headings. */
 const LEAD_STOP = /^(?:and|of|the|for|between|by|to|with|from|in|on|at|this|dated|as|amended|exhibit|schedule|annex|appendix|agreement|deed|lease|contract|parties|party|executed|signed)\b[ \t]*/i;
 
+/** Heading words that run into a company name written in capitals ("RULES OF THE X PLC"). */
+const CAPS_HEADING = /^(?:RULES|PLAN|TERMS|CONDITIONS|ARTICLES|MEMORANDUM|MINUTES|RESOLUTIONS?|WRITTEN|SPECIAL|ORDINARY|NOTICE|MEETING|BOARD|SHARE|OPTION|SCHEME|POLICY|CERTIFICATE|FORM|DATED|BETWEEN|AND|OF|THE|FOR|IN|ON|BY|TO)\b[ \t]*/;
+
 export function ruleSpans(text: string): Span[] {
   const out: Span[] = [];
   for (const rule of RULES) {
@@ -58,8 +61,9 @@ export function ruleSpans(text: string): Span[] {
           start += value.length - tail.length;
           value = tail;
         }
-        while (LEAD_STOP.test(value)) {
-          const cut = value.match(LEAD_STOP)![0].length;
+        while (LEAD_STOP.test(value) || (value === value.toUpperCase() && CAPS_HEADING.test(value))) {
+          const re = LEAD_STOP.test(value) ? LEAD_STOP : CAPS_HEADING;
+          const cut = value.match(re)![0].length;
           value = value.slice(cut);
           start += cut;
         }

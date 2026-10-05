@@ -67,3 +67,9 @@ describe('session', () => {
     expect(s2.placeholderFor('EMAIL', 'c@d.com')).toBe('[EMAIL_2]');
   });
 });
+
+describe('capitals', () => {
+  it('cuts heading words off a company name in capitals', () => {
+    expect(kinds('RULES OF THE HENDERSON GROUP PLC')).toEqual([['COMPANY', 'HENDERSON GROUP PLC']]);
+  });
+});

@@ -40,7 +40,12 @@ export class Session {
   placeholderFor(kind: Kind, value: string): string {
     const key = normalise(kind, value);
     const known = this.byKey.get(key);
-    if (known) return known;
+    if (known) {
+      // Restore with the ordinary spelling, not a heading in capitals ("ACME LIMITED").
+      const shown = this.byPlaceholder.get(known)!;
+      if (shown === shown.toUpperCase() && value !== value.toUpperCase()) this.byPlaceholder.set(known, value);
+      return known;
+    }
     const n = (this.counters.get(kind) ?? 0) + 1;
     const ph = `[${kind}_${n}]`;
     this.add(key, ph, value);
