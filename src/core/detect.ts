@@ -31,11 +31,54 @@ export function plausibleName(text: string, span: Span): boolean {
   return !new RegExp(String.raw`(?<![\w])${w.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\w])`).test(text);
 }
 
+const HONORIFIC = /^(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Sir|Dame|Lord|Lady|Rev)\.?\s+/;
+
+/** "Ms Patel" -> "Patel": the title is not the name, and a bare title is no name at all. */
+function trimHonorific(s: Span): Span | null {
+  if (s.kind !== 'PERSON') return s;
+  const m = s.text.match(HONORIFIC);
+  if (!m) return /^(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Sir|Dame|Lord|Lady|Rev)\.?$/.test(s.text.trim()) ? null : s;
+  const rest = s.text.slice(m[0].length);
+  return rest ? { ...s, start: s.start + m[0].length, text: rest } : null;
+}
+
+/** Wherever "Priya Patel" appears, a bare "Patel" elsewhere in the text is the same person. */
+function surnameSpans(text: string, people: Span[]): Span[] {
+  const out: Span[] = [];
+  const seen = new Set<string>();
+  for (const p of people) {
+    const parts = p.text.trim().split(/\s+/);
+    const surname = parts[parts.length - 1];
+    if (parts.length < 2 || surname.length < 3 || seen.has(surname)) continue;
+    seen.add(surname);
+    const re = new RegExp(String.raw`(?<![\w])${surname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\w])`, 'g');
+    for (const m of text.matchAll(re)) {
+      out.push({ start: m.index!, end: m.index! + m[0].length, kind: 'PERSON', text: m[0], source: 'ner', score: p.score });
+    }
+  }
+  return out;
+}
+
 /** Every span to mask in `text`, non-overlapping and in order. */
 export async function detect(text: string, opts: DetectOptions = {}): Promise<Span[]> {
   const spans: Span[] = [...ruleSpans(text), ...listSpans(text, opts.terms ?? [])];
-  if (opts.classify) spans.push(...(await nerSpans(text, opts.classify)).filter((s) => plausibleName(text, s)));
+  if (opts.classify) {
+    const found = (await nerSpans(text, opts.classify)).map(trimHonorific)
+      .filter((s): s is Span => !!s && plausibleName(text, s));
+    spans.push(...found, ...surnameSpans(text, found.filter((s) => s.kind === 'PERSON')));
+  }
   if (opts.session) spans.push(...opts.session.aliasSpans(text));
+  // Once a value is found anywhere, mask every other occurrence of it too.
+  const seen = new Map<string, Span>();
+  for (const s of spans) if (s.text.trim().length >= 3 && !seen.has(s.text)) seen.set(s.text, s);
+  for (const [value, s] of seen) {
+    const re = new RegExp(String.raw`(?<![\w])${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\w])`, 'g');
+    for (const m of text.matchAll(re)) spans.push({ ...s, start: m.index!, end: m.index! + m[0].length, text: m[0], source: 'ner' });
+  }
   const allow = new Set((opts.allow ?? []).map((a) => a.trim().toLowerCase()));
-  return resolve(spans).filter((s) => !allow.has(s.text.trim().toLowerCase()));
+  // Never mask inside a placeholder we issued earlier ("[PERSON_1]" must not become "[ORG_1]").
+  const issued: [number, number][] = [];
+  for (const m of text.matchAll(/\[[A-Z_]+_\d+\]/g)) issued.push([m.index!, m.index! + m[0].length]);
+  return resolve(spans).filter((s) => !allow.has(s.text.trim().toLowerCase()) &&
+    issued.every(([a, b]) => s.end <= a || s.start >= b));
 }

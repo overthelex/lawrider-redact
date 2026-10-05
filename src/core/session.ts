@@ -77,6 +77,8 @@ export class Session {
 
   /** Replace spans (already resolved, non-overlapping) with placeholders. */
   anonymise(text: string, spans: Span[]): string {
+    // Full names first, so a surname that appears earlier in the text gets the same placeholder.
+    for (const s of spans) if (s.kind === 'PERSON' && /\s/.test(s.text.trim())) this.placeholderFor('PERSON', s.text);
     let out = '';
     let at = 0;
     for (const s of [...spans].sort((a, b) => a.start - b.start)) {

@@ -73,3 +73,26 @@ describe('capitals', () => {
     expect(kinds('RULES OF THE HENDERSON GROUP PLC')).toEqual([['COMPANY', 'HENDERSON GROUP PLC']]);
   });
 });
+
+import { detect } from '../src/core/detect.js';
+describe('detect', () => {
+  it('does not mask placeholders it issued earlier', async () => {
+    const t = '[PERSON_1] works for [COMPANY_2] and Acme Limited.';
+    const spans = await detect(t, { classify: async () => [{ entity: 'B-ORG', score: 0.9, index: 1, word: 'PERSON' }] });
+    expect(spans.map((s) => s.text)).toEqual(['Acme Limited']);
+  });
+  it('respects the allow list', async () => {
+    expect((await detect('Acme Limited', { allow: ['acme limited'] })).length).toBe(0);
+  });
+});
+
+describe('people', () => {
+  const tags = (words: [string, string][]) => async () => words.map(([word, entity], index) => ({ word, entity, score: 0.99, index }));
+  it('drops titles and masks a surname used before or after the full name', async () => {
+    const t = 'Patel agreed. Later Priya Patel signed, and Ms Patel paid.';
+    const classify = tags([['Patel', 'B-PER'], ['Priya', 'B-PER'], ['Patel', 'I-PER'], ['Ms', 'B-PER'], ['Patel', 'I-PER']]);
+    const s = new Session();
+    const out = s.anonymise(t, await detect(t, { classify }));
+    expect(out).toBe('[PERSON_1] agreed. Later [PERSON_1] signed, and Ms [PERSON_1] paid.');
+  });
+});

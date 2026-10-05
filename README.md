@@ -25,8 +25,15 @@ Detection combines fixed patterns for UK identifiers, a small named-entity model
 ## Development
 ```
 npm install
-npm test        # unit tests
-npm run build   # builds the extension into dist/
+npm run fetch-model   # downloads dslim/distilbert-NER (Apache-2.0) and quantises it to int8 (needs python3 + onnxruntime)
+npm test              # unit tests (the real-model test runs when the model is present)
+npm run build         # builds the unpacked extension into dist/ (~95 MB with model and runtime)
+CHROME_BIN=/path/to/chrome-for-testing npm run e2e   # loads dist/ in Chrome for Testing and checks: nothing leaks, no network requests
 ```
 
 Licence: Apache-2.0. Made by [LawRider](https://lawrider.uk).
+
+## Load it in Chrome (testing)
+1. `npm run build`
+2. Open `chrome://extensions`, switch on **Developer mode**, click **Load unpacked** and choose `dist/`.
+3. Pin the extension and click its icon to open the side panel, then use ChatGPT or Claude as usual.
